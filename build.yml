@@ -1,0 +1,42 @@
+name: Kindle Key Listener ARMEL Static Build
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build_armel:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4 # 1. 检出代码
+
+    - name: 安装 ARMEL 交叉编译工具链 (gcc-arm-linux-gnueabi)
+      run: |
+        sudo apt-get update
+        # 核心变动：安装 arm-linux-gnueabi 编译器，适用于 armel (Soft-Float)
+        sudo apt-get install -y gcc-arm-linux-gnueabi libc6-dev-armel-cross
+
+    - name: 静态编译 C 代码
+      run: |
+        # 使用 arm-linux-gnueabi-gcc 编译器
+        ARM_GCC="arm-linux-gnueabi-gcc"
+        INPUT_FILE="main.c"
+        OUTPUT_FILE="key_listener_armel_static"
+        
+        echo "Compiling for ARMEL, static linking..."
+        
+        # -static 标志确保生成的二进制文件不依赖目标系统的库
+        # 编译 main.c 文件
+        $ARM_GCC -static -O2 $INPUT_FILE -o $OUTPUT_FILE
+        
+        # 验证文件信息
+        file $OUTPUT_FILE
+
+    - name: 上传构建产物 (Artifact)
+      uses: actions/upload-artifact@v4
+      with:
+        name: key-listener-kindle-armel
+        path: key_listener_armel_static
+        retention-days: 7
