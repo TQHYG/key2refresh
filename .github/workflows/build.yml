@@ -1,42 +1,60 @@
-name: Kindle Key Listener ARMEL Static Build
+name: Kindle Key Listener ARMEL Static Build and Release
 
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
+  workflow_dispatch: # 允许手动触发
 
 jobs:
-  build_armel:
+  build_and_release:
     runs-on: ubuntu-latest
     
+    # 确保整个 Job 具有写入 packages 和 contents 的权限
+    permissions:
+      contents: write 
+      packages: write
+      
     steps:
-    - uses: actions/checkout@v4 # 1. 检出代码
+    - uses: actions/checkout@v4
 
-    - name: 安装 ARMEL 交叉编译工具链 (gcc-arm-linux-gnueabi)
+    # --- 阶段 1: 编译 ---
+    - name: 1. 安装 ARMEL 交叉编译工具链
       run: |
         sudo apt-get update
-        # 核心变动：安装 arm-linux-gnueabi 编译器，适用于 armel (Soft-Float)
         sudo apt-get install -y gcc-arm-linux-gnueabi libc6-dev-armel-cross
 
-    - name: 静态编译 C 代码
+    - name: 2. 静态编译 C 代码
+      id: compile
       run: |
-        # 使用 arm-linux-gnueabi-gcc 编译器
         ARM_GCC="arm-linux-gnueabi-gcc"
         INPUT_FILE="main.c"
         OUTPUT_FILE="key_listener_armel_static"
         
-        echo "Compiling for ARMEL, static linking..."
-        
-        # -static 标志确保生成的二进制文件不依赖目标系统的库
-        # 编译 main.c 文件
+        # 编译命令
         $ARM_GCC -static -O2 $INPUT_FILE -o $OUTPUT_FILE
         
-        # 验证文件信息
-        file $OUTPUT_FILE
+        echo "编译成功，文件大小: $(du -h $OUTPUT_FILE | awk '{print $1}')"
+        # 设置一个环境变量，用于后续步骤的发布
+        echo "ASSET_NAME=$OUTPUT_FILE" >> $GITHUB_ENV 
 
-    - name: 上传构建产物 (Artifact)
-      uses: actions/upload-artifact@v4
+    # --- 阶段 2: 发布到 Pre-Release ---
+    - name: 3. 创建 Pre-Release 并上传构建产物
+      uses: softprops/action-gh-release@v2
       with:
-        name: key-listener-kindle-armel
-        path: key_listener_armel_static
-        retention-days: 7
+        # 标签：使用 run ID 来确保每次构建都有唯一的标签
+        tag_name: ${{ github.ref_name }}-${{ github.run_id }}
+        
+        # 名称：构建版本号
+        name: Build ${{ github.run_id }} (Pre-Release)
+        
+        # 标记为预发布版本
+        prerelease: true 
+        
+        # 自动生成 Release 描述
+        generate_release_notes: true 
+        
+        # 上传编译好的文件
+        files: ${{ env.ASSET_NAME }}
+
+        # Token 必须有权限创建 Release，使用 GITHUB_TOKEN 默认即可
+        token: ${{ secrets.GITHUB_TOKEN }}
